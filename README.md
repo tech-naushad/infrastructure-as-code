@@ -2,8 +2,6 @@
 
 This repository demonstrates **production-ready Infrastructure as Code (IaC)** practices using Kubernetes, Docker, and CI/CD pipelines. It is designed to showcase how modern backend and platform infrastructure is structured, automated, and maintained in real-world engineering teams.
 
-The goal of this repository is to provide recruiters and hiring managers with a **clear, practical view of my DevOps and cloud-native skills**, rather than isolated demos.
-
 ---
 
 ## 🔧 Technologies & Tools
