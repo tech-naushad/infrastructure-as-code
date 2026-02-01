@@ -1,0 +1,170 @@
+# =========================================================
+# Namespace (shared for data services)
+# =========================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: data-services
+
+---
+# =========================================================
+# PersistentVolume (Docker Desktop - generic)
+# =========================================================
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mongodb-pv
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: hostpath
+  hostPath:
+    path: "/run/desktop/mnt/host/c/data-services/mongodb"
+    type: DirectoryOrCreate
+
+---
+# =========================================================
+# Headless Service (StatefulSet requirement)
+# =========================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb-headless
+  namespace: data-services
+  labels:
+    app: mongodb
+spec:
+  clusterIP: None
+  selector:
+    app: mongodb
+  ports:
+    - name: mongodb
+      port: 27017
+
+---
+# =========================================================
+# Secret - MongoDB Root Credentials
+# =========================================================
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-secret
+  namespace: data-services
+type: Opaque
+stringData:
+  MONGO_INITDB_ROOT_USERNAME: mongo_admin
+  MONGO_INITDB_ROOT_PASSWORD: Mongo@Secure123
+
+---
+# =========================================================
+# ConfigMap - MongoDB Default Database
+# =========================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mongodb-config
+  namespace: data-services
+data:
+  MONGO_INITDB_DATABASE: app_db
+
+---
+# =========================================================
+# StatefulSet - Generic MongoDB
+# =========================================================
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+  namespace: data-services
+spec:
+  serviceName: mongodb-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+        component: database
+    spec:
+      securityContext:
+        fsGroup: 999
+      containers:
+        - name: mongodb
+          image: mongo:7.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 27017
+              name: mongodb
+          env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: MONGO_INITDB_ROOT_USERNAME
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mongodb-secret
+                  key: MONGO_INITDB_ROOT_PASSWORD
+            - name: MONGO_INITDB_DATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: mongodb-config
+                  key: MONGO_INITDB_DATABASE
+          volumeMounts:
+            - name: mongodb-storage
+              mountPath: /data/db
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            tcpSocket:
+              port: 27017
+            initialDelaySeconds: 45
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 27017
+            initialDelaySeconds: 15
+            periodSeconds: 10
+
+  volumeClaimTemplates:
+    - metadata:
+        name: mongodb-storage
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: hostpath
+        resources:
+          requests:
+            storage: 10Gi
+
+---
+# =========================================================
+# NodePort Service (external access - Docker Desktop)
+# =========================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb
+  namespace: data-services
+  labels:
+    app: mongodb
+spec:
+  type: NodePort
+  selector:
+    app: mongodb
+  ports:
+    - name: mongodb
+      port: 27017
+      targetPort: 27017
+      nodePort: 30017
